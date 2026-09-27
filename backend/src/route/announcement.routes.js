@@ -9,18 +9,29 @@ import {
   getAnnouncementById,
   updateAnnouncement,
   deleteAnnouncement,
-  getMenteeAnnouncements
+  getMenteeAnnouncements,
 } from "../controller/announcement.controllers.js";
 
 const router = express.Router();
 
-// CREATE
+
+// =========================================================
+// CREATE ANNOUNCEMENT
+// Only Mentor can create announcements
+// =========================================================
+
 router.post(
   "/",
   verifyToken,
   allowRoles("Mentor"),
   createAnnouncement
 );
+
+
+// =========================================================
+// MENTEE ANNOUNCEMENTS
+// Mentee can see announcements
+// =========================================================
 
 router.get(
   "/mentee-announcements",
@@ -29,7 +40,12 @@ router.get(
   getMenteeAnnouncements
 );
 
-// GET ALL MY ANNOUNCEMENTS
+
+// =========================================================
+// MENTOR ANNOUNCEMENTS
+// Mentor can see their own announcements
+// =========================================================
+
 router.get(
   "/my-announcements",
   verifyToken,
@@ -37,7 +53,12 @@ router.get(
   getMyAnnouncements
 );
 
-// GET SINGLE
+
+// =========================================================
+// GET SINGLE ANNOUNCEMENT
+// Only Mentor can access
+// =========================================================
+
 router.get(
   "/:id",
   verifyToken,
@@ -45,7 +66,12 @@ router.get(
   getAnnouncementById
 );
 
-// UPDATE
+
+// =========================================================
+// UPDATE ANNOUNCEMENT
+// Only Mentor can update
+// =========================================================
+
 router.patch(
   "/:id",
   verifyToken,
@@ -53,12 +79,18 @@ router.patch(
   updateAnnouncement
 );
 
-// DELETE
+
+// =========================================================
+// DELETE ANNOUNCEMENT
+// Only Mentor can delete
+// =========================================================
+
 router.delete(
   "/:id",
   verifyToken,
   allowRoles("Mentor"),
   deleteAnnouncement
 );
+
 
 export default router;

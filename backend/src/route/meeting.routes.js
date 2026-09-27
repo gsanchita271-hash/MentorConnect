@@ -1,17 +1,22 @@
 import express from "express";
+
 import verifyToken from "../middleware/auth.middlewares.js";
 import { allowRoles } from "../middleware/role.middlewares.js";
 
 import {
   createMeeting,
   getMyMeetings,
-  getMenteeMeetings
+  getMenteeMeetings,
 } from "../controller/meeting.controllers.js";
 
 const router = express.Router();
 
 
-// Schedule a meeting
+// ==========================================
+// CREATE MEETING
+// Only Mentor can create/schedule a meeting
+// ==========================================
+
 router.post(
   "/",
   verifyToken,
@@ -20,7 +25,11 @@ router.post(
 );
 
 
-// Get mentor's meetings
+// ==========================================
+// MENTOR MEETINGS
+// Mentor can see meetings created by them
+// ==========================================
+
 router.get(
   "/my-meetings",
   verifyToken,
@@ -28,11 +37,18 @@ router.get(
   getMyMeetings
 );
 
+
+// ==========================================
+// MENTEE MEETINGS
+// Mentee can see meetings assigned to them
+// ==========================================
+
 router.get(
   "/mentee-meetings",
   verifyToken,
   allowRoles("Mentee"),
   getMenteeMeetings
 );
+
 
 export default router;

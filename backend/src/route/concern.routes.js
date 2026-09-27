@@ -10,16 +10,19 @@ import {
   getConcernById,
   updateConcern,
   deleteConcern,
-  getMenteeConcerns
+  getMenteeConcerns,
 } from "../controller/concern.controllers.js";
 
 const router = express.Router();
+
 
 // =========================================================
 // MENTEE ROUTES
 // =========================================================
 
 // Submit a new concern
+// Only Mentee can create a concern
+
 router.post(
   "/",
   verifyToken,
@@ -27,13 +30,21 @@ router.post(
   createConcern
 );
 
-// Get logged-in mentee's concerns
+
+// Get logged-in Mentee's own concerns
+// Mentee Dashboard should use this route
+
 router.get(
   "/my-concerns",
   verifyToken,
   allowRoles("Mentee"),
   getMyConcerns
 );
+
+
+// Get Mentee concerns
+// Only use this if your controller/frontend specifically needs
+// this separate endpoint
 
 router.get(
   "/mentee-concerns",
@@ -42,11 +53,13 @@ router.get(
   getMenteeConcerns
 );
 
+
 // =========================================================
 // MENTOR ROUTES
 // =========================================================
 
-// Get concerns from assigned mentees
+// Get concerns from assigned Mentees
+
 router.get(
   "/mentor-concerns",
   verifyToken,
@@ -54,7 +67,10 @@ router.get(
   getMentorConcerns
 );
 
+
 // Get single concern
+// Only Mentor can access
+
 router.get(
   "/:id",
   verifyToken,
@@ -62,7 +78,10 @@ router.get(
   getConcernById
 );
 
+
 // Update concern
+// Only Mentor can update
+
 router.patch(
   "/:id",
   verifyToken,
@@ -70,14 +89,16 @@ router.patch(
   updateConcern
 );
 
+
 // Delete concern
+// Only Mentor can delete
+
 router.delete(
   "/:id",
   verifyToken,
   allowRoles("Mentor"),
   deleteConcern
 );
-
 
 
 export default router;

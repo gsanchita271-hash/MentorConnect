@@ -9,13 +9,29 @@ import {
   getTaskById,
   updateTask,
   deleteTask,
-  getMenteeTasks
+  getMenteeTasks,
 } from "../controller/task.controllers.js";
 
 const router = express.Router();
 
-// Create Task
-router.post("/", verifyToken, allowRoles("Mentor"), createTask);
+
+// ==========================================
+// CREATE TASK
+// Only Mentor can create a task
+// ==========================================
+
+router.post(
+  "/",
+  verifyToken,
+  allowRoles("Mentor"),
+  createTask
+);
+
+
+// ==========================================
+// MENTOR TASKS
+// Mentor can see their own tasks
+// ==========================================
 
 router.get(
   "/my-tasks",
@@ -24,12 +40,24 @@ router.get(
   getMyTasks
 );
 
+
+// ==========================================
+// MENTEE TASKS
+// Mentee can see tasks assigned to them
+// ==========================================
+
 router.get(
   "/mentee-tasks",
   verifyToken,
   allowRoles("Mentee"),
   getMenteeTasks
 );
+
+
+// ==========================================
+// GET TASK BY ID
+// Only Mentor can access
+// ==========================================
 
 router.get(
   "/:id",
@@ -38,6 +66,12 @@ router.get(
   getTaskById
 );
 
+
+// ==========================================
+// UPDATE TASK
+// Only Mentor can update
+// ==========================================
+
 router.patch(
   "/:id",
   verifyToken,
@@ -45,13 +79,18 @@ router.patch(
   updateTask
 );
 
+
+// ==========================================
+// DELETE TASK
+// Only Mentor can delete
+// ==========================================
+
 router.delete(
   "/:id",
   verifyToken,
   allowRoles("Mentor"),
   deleteTask
 );
-
 
 
 export default router;

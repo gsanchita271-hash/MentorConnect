@@ -1,7 +1,10 @@
 import { Announcement } from "../model/announcement.models.js";
 import { Auth } from "../model/auth.models.js";
 
+// ======================================================
 // CREATE ANNOUNCEMENT
+// ======================================================
+
 export const createAnnouncement = async (req, res) => {
   try {
     const {
@@ -12,23 +15,22 @@ export const createAnnouncement = async (req, res) => {
       publishDate,
     } = req.body;
 
+    // Required fields
     if (!title || !message) {
       return res.status(400).json({
         message: "Title and message are required",
       });
     }
 
-    if (
-      !Array.isArray(mentees) ||
-      mentees.length === 0
-    ) {
+    // Mentees required
+    if (!Array.isArray(mentees) || mentees.length === 0) {
       return res.status(400).json({
         message: "At least one mentee is required",
       });
     }
 
-    // Check that selected mentees actually belong
-    // to the logged-in mentor
+    // Check selected mentees
+    // belong to logged-in mentor
     const validMentees = await Auth.find({
       _id: { $in: mentees },
       role: "Mentee",
@@ -42,6 +44,7 @@ export const createAnnouncement = async (req, res) => {
       });
     }
 
+    // Valid priorities
     const validPriorities = [
       "Normal",
       "Important",
@@ -57,6 +60,7 @@ export const createAnnouncement = async (req, res) => {
       });
     }
 
+    // Create announcement
     const announcement = await Announcement.create({
       mentor: req.user.id,
       mentees,
@@ -66,6 +70,7 @@ export const createAnnouncement = async (req, res) => {
       publishDate: publishDate || new Date(),
     });
 
+    // Populate announcement
     const populatedAnnouncement =
       await Announcement.findById(announcement._id)
         .populate(
@@ -77,24 +82,29 @@ export const createAnnouncement = async (req, res) => {
           "name email course division semester rollNumber"
         );
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Announcement created successfully",
       announcement: populatedAnnouncement,
     });
+
   } catch (error) {
     console.error(
       "Create announcement error:",
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to create announcement",
     });
   }
 };
 
 
+// ======================================================
 // GET MY ANNOUNCEMENTS
+// Mentor
+// ======================================================
+
 export const getMyAnnouncements = async (req, res) => {
   try {
     const announcements = await Announcement.find({
@@ -106,24 +116,29 @@ export const getMyAnnouncements = async (req, res) => {
       )
       .sort({ publishDate: -1 });
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Announcements fetched successfully",
       announcements,
     });
+
   } catch (error) {
     console.error(
       "Get announcements error:",
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to fetch announcements",
     });
   }
 };
 
 
+// ======================================================
 // GET SINGLE ANNOUNCEMENT
+// Mentor
+// ======================================================
+
 export const getAnnouncementById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -147,24 +162,29 @@ export const getAnnouncementById = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Announcement fetched successfully",
       announcement,
     });
+
   } catch (error) {
     console.error(
       "Get announcement error:",
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to fetch announcement",
     });
   }
 };
 
 
+// ======================================================
 // UPDATE ANNOUNCEMENT
+// Mentor
+// ======================================================
+
 export const updateAnnouncement = async (req, res) => {
   try {
     const { id } = req.params;
@@ -188,6 +208,7 @@ export const updateAnnouncement = async (req, res) => {
       });
     }
 
+    // Update mentees
     if (mentees !== undefined) {
       if (
         !Array.isArray(mentees) ||
@@ -215,6 +236,7 @@ export const updateAnnouncement = async (req, res) => {
       announcement.mentees = mentees;
     }
 
+    // Update title
     if (title !== undefined) {
       if (!title.trim()) {
         return res.status(400).json({
@@ -225,6 +247,7 @@ export const updateAnnouncement = async (req, res) => {
       announcement.title = title.trim();
     }
 
+    // Update message
     if (message !== undefined) {
       if (!message.trim()) {
         return res.status(400).json({
@@ -235,6 +258,7 @@ export const updateAnnouncement = async (req, res) => {
       announcement.message = message.trim();
     }
 
+    // Update priority
     if (priority !== undefined) {
       const validPriorities = [
         "Normal",
@@ -251,6 +275,7 @@ export const updateAnnouncement = async (req, res) => {
       announcement.priority = priority;
     }
 
+    // Update publish date
     if (publishDate !== undefined) {
       announcement.publishDate = publishDate;
     }
@@ -268,24 +293,29 @@ export const updateAnnouncement = async (req, res) => {
           "name email course division semester rollNumber"
         );
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Announcement updated successfully",
       announcement: updatedAnnouncement,
     });
+
   } catch (error) {
     console.error(
       "Update announcement error:",
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to update announcement",
     });
   }
 };
 
 
+// ======================================================
 // DELETE ANNOUNCEMENT
+// Mentor
+// ======================================================
+
 export const deleteAnnouncement = async (req, res) => {
   try {
     const { id } = req.params;
@@ -303,36 +333,68 @@ export const deleteAnnouncement = async (req, res) => {
 
     await Announcement.findByIdAndDelete(id);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Announcement deleted successfully",
     });
+
   } catch (error) {
     console.error(
       "Delete announcement error:",
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to delete announcement",
     });
   }
 };
 
+
+// ======================================================
+// GET MENTEE ANNOUNCEMENTS
+// Mentee
+// ======================================================
+
 export const getMenteeAnnouncements = async (req, res) => {
   try {
+    // Logged-in mentee ID
+    const menteeId = req.user.id;
+
+    console.log(
+      "Mentee ID:",
+      menteeId
+    );
+
+    // Find announcements where
+    // logged-in mentee exists inside mentees array
     const announcements = await Announcement.find({
-      mentees: req.user.id,
+      mentees: menteeId,
     })
       .populate(
         "mentor",
         "name email department designation"
       )
-      .sort({ publishDate: -1 });
+      .sort({
+        publishDate: -1,
+      });
+
+    console.log(
+      "Announcements found:",
+      announcements.length
+    );
+
+    console.log(
+      "Announcements:",
+      announcements
+    );
 
     return res.status(200).json({
-      message: "Mentee announcements fetched successfully",
+      message:
+        "Mentee announcements fetched successfully",
+
       announcements,
     });
+
   } catch (error) {
     console.error(
       "Get mentee announcements error:",
