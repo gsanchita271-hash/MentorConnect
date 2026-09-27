@@ -18,6 +18,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://mentor-connect-wheat.vercel.app",
+      "https://mentor-connect-rao7x12xb-gsanchita271-hash.vercel.app",
     ],
     credentials: true,
   })
