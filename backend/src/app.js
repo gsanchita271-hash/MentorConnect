@@ -30,7 +30,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://mentor-connect-wheat.vercel.app",
+      "https://mentor-connect-wheat.vercel.app/",
+      
     ],
     credentials: true,
   })
