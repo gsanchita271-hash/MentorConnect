@@ -8,6 +8,7 @@ import {
   getAllUsers,
   getMyProfile,
   updateMyProfile,
+  updateUserByAdmin,
   getMyMentees,
   assignMentee,
   rejectUser,
@@ -17,7 +18,6 @@ import {
   getMyMentor,
 } from "../controller/auth.contollers.js";
 
-import authMiddleware from "../middleware/auth.middlewares.js";
 import verifyToken from "../middleware/auth.middlewares.js";
 import { allowRoles } from "../middleware/role.middlewares.js";
 
@@ -27,15 +27,9 @@ const router = Router();
 // AUTH
 // ======================================================
 
-router.post(
-  "/register",
-  registerUser
-);
+router.post("/register", registerUser);
 
-router.post(
-  "/login",
-  loginUser
-);
+router.post("/login", loginUser);
 
 // ======================================================
 // ADMIN - USER APPROVAL
@@ -65,6 +59,14 @@ router.get(
   getAllUsers
 );
 
+// Edit Mentor/Mentee by Admin
+router.patch(
+  "/users/:id",
+  verifyToken,
+  allowRoles("Admin"),
+  updateUserByAdmin
+);
+
 // Reject pending user
 router.patch(
   "/reject/:id",
@@ -75,7 +77,7 @@ router.patch(
 
 // Remove approved user
 router.delete(
-  "/remove/:id",
+  "/users/:id",
   verifyToken,
   allowRoles("Admin"),
   removeUser
@@ -124,10 +126,7 @@ router.get(
 router.patch(
   "/me",
   verifyToken,
-  allowRoles(
-    "Mentor",
-    "Mentee"
-  ),
+  allowRoles("Mentor", "Mentee"),
   updateMyProfile
 );
 
@@ -161,11 +160,10 @@ router.get(
 
 router.get(
   "/protected",
-  authMiddleware,
+  verifyToken,
   (req, res) => {
     res.status(200).json({
-      message:
-        "You are authenticated",
+      message: "You are authenticated",
       user: req.user,
     });
   }

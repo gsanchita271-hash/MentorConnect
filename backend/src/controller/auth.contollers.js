@@ -13,16 +13,16 @@ const registerUser = async (req, res) => {
       email,
       password,
       role,
-      department,
-      designation,
-      qualification,
-      experience,
-      employeeId,
       course,
       division,
       semester,
       rollNumber,
       ern,
+      department,
+      designation,
+      employeeId,
+      qualification,
+      experience,
     } = req.body;
 
     if (!name || !email || !password || !role) {
@@ -31,17 +31,33 @@ const registerUser = async (req, res) => {
       });
     }
 
-    if (!["Admin", "Mentor", "Mentee"].includes(role)) {
+    const normalizedRole = String(role).trim();
+
+    const allowedRoles = ["Admin", "Mentor", "Mentee"];
+
+    if (!allowedRoles.includes(normalizedRole)) {
       return res.status(400).json({
         message: "Invalid role",
       });
     }
 
-    // =========================
-    // MENTEE VALIDATION
-    // =========================
+    const normalizedEmail = String(email).trim().toLowerCase();
 
-    if (role === "Mentee") {
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        message: "Email already registered",
+      });
+    }
+
+    // ==================================================
+    // MENTEE VALIDATION
+    // ==================================================
+
+    if (normalizedRole === "Mentee") {
       if (
         !course ||
         !division ||
@@ -54,13 +70,25 @@ const registerUser = async (req, res) => {
             "Course, division, semester, roll number and ERN are required for mentee",
         });
       }
+
+      const normalizedErn = String(ern).trim().toUpperCase();
+
+      const existingErn = await User.findOne({
+        ern: normalizedErn,
+      });
+
+      if (existingErn) {
+        return res.status(409).json({
+          message: "ERN already registered",
+        });
+      }
     }
 
-    // =========================
+    // ==================================================
     // MENTOR VALIDATION
-    // =========================
+    // ==================================================
 
-    if (role === "Mentor") {
+    if (normalizedRole === "Mentor") {
       if (
         !department ||
         !designation ||
@@ -71,243 +99,151 @@ const registerUser = async (req, res) => {
             "Department, designation and employee ID are required for mentor",
         });
       }
-    }
 
-    // =========================
-    // EMAIL DUPLICATE
-    // =========================
-
-    const normalizedEmail =
-      email.toLowerCase().trim();
-
-    const existingUser =
-      await Auth.findOne({
-        email: normalizedEmail,
+      const existingEmployee = await User.findOne({
+        employeeId: String(employeeId).trim(),
       });
 
-    if (existingUser) {
-      return res.status(400).json({
-        message:
-          "User already exists with this email",
-      });
-    }
-
-    // =========================
-    // ERN DUPLICATE
-    // =========================
-
-    let normalizedErn;
-
-    if (role === "Mentee") {
-      normalizedErn =
-        ern.trim().toUpperCase();
-
-      const existingErn =
-        await Auth.findOne({
-          ern: normalizedErn,
-        });
-
-      if (existingErn) {
-        return res.status(400).json({
-          message:
-            "This ERN is already registered",
+      if (existingEmployee) {
+        return res.status(409).json({
+          message: "Employee ID already registered",
         });
       }
     }
 
-    // =========================
-    // PASSWORD
-    // =========================
+    // ==================================================
+    // HASH PASSWORD
+    // ==================================================
 
-    const hashedPassword =
-      await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // =========================
+    // ==================================================
     // CREATE USER
-    // =========================
+    // ==================================================
 
-    const user = await Auth.create({
-      name: name.trim(),
+    const userData = {
+      name: String(name).trim(),
       email: normalizedEmail,
       password: hashedPassword,
-      role,
+      role: normalizedRole,
+      isApproved: normalizedRole === "Admin",
+    };
 
-      // Mentor
-      department:
-        role === "Mentor"
-          ? department
-          : undefined,
+    // Mentee fields
+    if (normalizedRole === "Mentee") {
+      userData.course = String(course).trim();
+      userData.division = String(division).trim();
+      userData.semester = Number(semester);
+      userData.rollNumber = String(rollNumber).trim();
+      userData.ern = String(ern).trim().toUpperCase();
+      userData.mentor = null;
+    }
 
-      designation:
-        role === "Mentor"
-          ? designation
-          : undefined,
+    // Mentor fields
+    if (normalizedRole === "Mentor") {
+      userData.department = String(department).trim();
+      userData.designation = String(designation).trim();
+      userData.employeeId = String(employeeId).trim();
+      userData.qualification = qualification
+        ? String(qualification).trim()
+        : "";
+      userData.experience = experience
+        ? String(experience).trim()
+        : "";
+    }
 
-      qualification:
-        role === "Mentor"
-          ? qualification
-          : undefined,
+    const user = await User.create(userData);
 
-      experience:
-        role === "Mentor"
-          ? experience
-          : undefined,
-
-      employeeId:
-        role === "Mentor"
-          ? employeeId
-          : undefined,
-
-      // Mentee
-      course:
-        role === "Mentee"
-          ? course
-          : undefined,
-
-      division:
-        role === "Mentee"
-          ? division
-          : undefined,
-
-      semester:
-        role === "Mentee"
-          ? semester
-          : undefined,
-
-      rollNumber:
-        role === "Mentee"
-          ? rollNumber
-          : undefined,
-
-      ern:
-        role === "Mentee"
-          ? normalizedErn
-          : undefined,
-
-      // Everyone needs admin approval
-      isApproved: false,
-
-      // No mentor initially
-      mentor: undefined,
-    });
+    const safeUser = user.toObject();
+    delete safeUser.password;
 
     return res.status(201).json({
       message:
-        "Registration successful. Wait for admin approval.",
-
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isApproved: user.isApproved,
-
-        course: user.course,
-        division: user.division,
-        semester: user.semester,
-        rollNumber: user.rollNumber,
-        ern: user.ern,
-      },
+        normalizedRole === "Admin"
+          ? "Admin registered successfully"
+          : "Registration successful. Waiting for admin approval.",
+      user: safeUser,
     });
   } catch (error) {
-    console.error(
-      "Register error:",
-      error
-    );
+    console.error("REGISTER ERROR:", error);
 
     return res.status(500).json({
-      message: "Registration failed",
+      message: "Server error during registration",
       error: error.message,
     });
   }
 };
 
 // ======================================================
-// LOGIN
+// LOGIN USER
 // ======================================================
 
 const loginUser = async (req, res) => {
   try {
-    const {
-      email,
-      password,
-    } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
-        message:
-          "Email and password are required",
+        message: "Email and password are required",
       });
     }
 
-    const user =
-      await Auth.findOne({
-        email:
-          email.toLowerCase().trim(),
-      });
+    const normalizedEmail = String(email)
+      .trim()
+      .toLowerCase();
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (!user) {
-      return res.status(404).json({
-        message:
-          "User not found. Please register first.",
+      return res.status(401).json({
+        message: "Invalid email or password",
       });
     }
 
-    const isPasswordCorrect =
-      await bcrypt.compare(
-        password,
-        user.password
-      );
+    const passwordMatch = await bcrypt.compare(
+      password,
+      user.password
+    );
 
-    if (!isPasswordCorrect) {
+    if (!passwordMatch) {
       return res.status(401).json({
-        message:
-          "Invalid email or password",
+        message: "Invalid email or password",
       });
     }
 
     if (!user.isApproved) {
       return res.status(403).json({
         message:
-          "Your account is waiting for admin approval.",
+          "Your account is waiting for admin approval",
       });
     }
 
-    const token =
-      jwt.sign(
-        {
-          id: user._id,
-          role: user.role,
-        },
-        process.env.JWT_SECRET,
-        {
-          expiresIn: "1d",
-        }
-      );
-
-    return res.status(200).json({
-      message:
-        "Login successful",
-
-      token,
-
-      user: {
+    const token = jwt.sign(
+      {
         id: user._id,
-        name: user.name,
-        email: user.email,
         role: user.role,
-        isApproved: user.isApproved,
-        ern: user.ern,
       },
-    });
-  } catch (error) {
-    console.error(
-      "Login error:",
-      error
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
     );
 
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    return res.status(200).json({
+      message: "Login successful",
+      token,
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+
     return res.status(500).json({
-      message: "Login failed",
+      message: "Server error during login",
       error: error.message,
     });
   }
@@ -317,16 +253,11 @@ const loginUser = async (req, res) => {
 // APPROVE USER
 // ======================================================
 
-const approveUser = async (
-  req,
-  res
-) => {
+const approveUser = async (req, res) => {
   try {
-    const { id } =
-      req.params;
+    const { id } = req.params;
 
-    const user =
-      await Auth.findById(id);
+    const user = await User.findById(id);
 
     if (!user) {
       return res.status(404).json({
@@ -334,38 +265,22 @@ const approveUser = async (
       });
     }
 
-    if (user.isApproved) {
-      return res.status(400).json({
-        message:
-          "User is already approved",
-      });
-    }
-
     user.isApproved = true;
 
     await user.save();
 
-    return res.status(200).json({
-      message:
-        "User approved successfully",
+    const safeUser = user.toObject();
+    delete safeUser.password;
 
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isApproved:
-          user.isApproved,
-      },
+    return res.status(200).json({
+      message: "User approved successfully",
+      user: safeUser,
     });
   } catch (error) {
-    console.error(
-      "Approve user error:",
-      error
-    );
+    console.error("APPROVE USER ERROR:", error);
 
     return res.status(500).json({
-      message: "Approval failed",
+      message: "Server error while approving user",
       error: error.message,
     });
   }
@@ -375,41 +290,25 @@ const approveUser = async (
 // GET PENDING USERS
 // ======================================================
 
-const getPendingUsers = async (
-  req,
-  res
-) => {
+const getPendingUsers = async (req, res) => {
   try {
-    const users =
-      await Auth.find({
-        isApproved: false,
-        role: {
-          $in: [
-            "Mentor",
-            "Mentee",
-          ],
-        },
-      })
-        .select("-password")
-        .sort({
-          createdAt: -1,
-        });
+    const users = await User.find({
+      isApproved: false,
+      role: {
+        $in: ["Mentor", "Mentee"],
+      },
+    })
+      .select("-password")
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
-      message:
-        "Pending users fetched successfully",
-
       users,
     });
   } catch (error) {
-    console.error(
-      "Pending users error:",
-      error
-    );
+    console.error("GET PENDING USERS ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to fetch pending users",
+      message: "Server error while fetching pending users",
       error: error.message,
     });
   }
@@ -419,40 +318,24 @@ const getPendingUsers = async (
 // GET ALL USERS
 // ======================================================
 
-const getAllUsers = async (
-  req,
-  res
-) => {
+const getAllUsers = async (req, res) => {
   try {
-    const users =
-      await Auth.find({
-        role: {
-          $in: [
-            "Mentor",
-            "Mentee",
-          ],
-        },
-      })
-        .select("-password")
-        .sort({
-          createdAt: -1,
-        });
+    const users = await User.find({
+      role: {
+        $in: ["Mentor", "Mentee"],
+      },
+    })
+      .select("-password")
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
-      message:
-        "Users fetched successfully",
-
       users,
     });
   } catch (error) {
-    console.error(
-      "Get all users error:",
-      error
-    );
+    console.error("GET ALL USERS ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to fetch users",
+      message: "Server error while fetching users",
       error: error.message,
     });
   }
@@ -462,15 +345,14 @@ const getAllUsers = async (
 // GET MY PROFILE
 // ======================================================
 
-const getMyProfile = async (
-  req,
-  res
-) => {
+const getMyProfile = async (req, res) => {
   try {
-    const user =
-      await Auth.findById(
-        req.user.id
-      ).select("-password");
+    const user = await User.findById(req.user.id)
+      .select("-password")
+      .populate(
+        "mentor",
+        "name email department designation employeeId qualification experience"
+      );
 
     if (!user) {
       return res.status(404).json({
@@ -478,98 +360,14 @@ const getMyProfile = async (
       });
     }
 
-    let profile;
-
-    // =========================
-    // MENTOR
-    // =========================
-
-    if (
-      user.role === "Mentor"
-    ) {
-      profile = {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isApproved:
-          user.isApproved,
-
-        department:
-          user.department,
-
-        designation:
-          user.designation,
-
-        employeeId:
-          user.employeeId,
-
-        experience:
-          user.experience,
-
-        qualification:
-          user.qualification,
-      };
-    }
-
-    // =========================
-    // MENTEE
-    // =========================
-
-    else if (
-      user.role === "Mentee"
-    ) {
-      profile = {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isApproved:
-          user.isApproved,
-
-        course: user.course,
-        division: user.division,
-        semester: user.semester,
-        rollNumber:
-          user.rollNumber,
-
-        ern: user.ern,
-
-        mentor:
-          user.mentor || null,
-      };
-    }
-
-    // =========================
-    // ADMIN
-    // =========================
-
-    else {
-      profile = {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isApproved:
-          user.isApproved,
-      };
-    }
-
     return res.status(200).json({
-      message:
-        "Profile fetched successfully",
-
-      user: profile,
+      user,
     });
   } catch (error) {
-    console.error(
-      "Get profile error:",
-      error
-    );
+    console.error("GET MY PROFILE ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to fetch profile",
+      message: "Server error while fetching profile",
       error: error.message,
     });
   }
@@ -579,34 +377,9 @@ const getMyProfile = async (
 // UPDATE MY PROFILE
 // ======================================================
 
-const updateMyProfile = async (
-  req,
-  res
-) => {
+const updateMyProfile = async (req, res) => {
   try {
-    const {
-      name,
-      email,
-
-      // Mentor
-      department,
-      designation,
-      employeeId,
-      qualification,
-      experience,
-
-      // Mentee
-      course,
-      division,
-      semester,
-      rollNumber,
-      ern,
-    } = req.body;
-
-    const user =
-      await Auth.findById(
-        req.user.id
-      );
+    const user = await User.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({
@@ -614,225 +387,329 @@ const updateMyProfile = async (
       });
     }
 
-    // =========================
-    // MENTOR
-    // =========================
+    const {
+      name,
+      email,
+      course,
+      division,
+      semester,
+      rollNumber,
+      ern,
+      department,
+      designation,
+      employeeId,
+      qualification,
+      experience,
+    } = req.body;
 
-    if (
-      user.role === "Mentor"
-    ) {
-      if (name?.trim()) {
-        user.name =
-          name.trim();
-      }
+    // ==================================================
+    // NAME
+    // ==================================================
 
-      if (email) {
-        const normalizedEmail =
-          email
-            .toLowerCase()
-            .trim();
-
-        const existingEmail =
-          await Auth.findOne({
-            email:
-              normalizedEmail,
-            _id: {
-              $ne: user._id,
-            },
-          });
-
-        if (existingEmail) {
-          return res.status(400).json({
-            message:
-              "This email is already registered",
-          });
-        }
-
-        user.email =
-          normalizedEmail;
-      }
-
-      user.department =
-        department ??
-        user.department;
-
-      user.designation =
-        designation ??
-        user.designation;
-
-      user.employeeId =
-        employeeId ??
-        user.employeeId;
-
-      user.qualification =
-        qualification ??
-        user.qualification;
-
-      user.experience =
-        experience ??
-        user.experience;
+    if (name !== undefined) {
+      user.name = String(name).trim();
     }
 
-    // =========================
-    // MENTEE
-    // =========================
+    // ==================================================
+    // EMAIL
+    // ==================================================
 
-    else if (
-      user.role === "Mentee"
-    ) {
-      if (name?.trim()) {
-        user.name =
-          name.trim();
+    if (email !== undefined) {
+      const normalizedEmail = String(email)
+        .trim()
+        .toLowerCase();
+
+      const existingEmail = await User.findOne({
+        email: normalizedEmail,
+        _id: { $ne: user._id },
+      });
+
+      if (existingEmail) {
+        return res.status(409).json({
+          message: "Email already registered",
+        });
       }
 
-      if (email) {
-        const normalizedEmail =
-          email
-            .toLowerCase()
-            .trim();
+      user.email = normalizedEmail;
+    }
 
-        const existingEmail =
-          await Auth.findOne({
-            email:
-              normalizedEmail,
-            _id: {
-              $ne: user._id,
-            },
-          });
+    // ==================================================
+    // MENTEE PROFILE
+    // ==================================================
 
-        if (existingEmail) {
-          return res.status(400).json({
-            message:
-              "This email is already registered",
-          });
-        }
-
-        user.email =
-          normalizedEmail;
+    if (user.role === "Mentee") {
+      if (course !== undefined) {
+        user.course = String(course).trim();
       }
 
-      if (
-        course !== undefined
-      ) {
-        user.course =
-          course;
+      if (division !== undefined) {
+        user.division = String(division).trim();
       }
 
-      if (
-        division !== undefined
-      ) {
-        user.division =
-          division;
+      if (semester !== undefined) {
+        user.semester = Number(semester);
       }
 
-      if (
-        semester !== undefined
-      ) {
-        user.semester =
-          semester;
+      if (rollNumber !== undefined) {
+        user.rollNumber = String(rollNumber).trim();
       }
 
-      if (
-        rollNumber !== undefined
-      ) {
-        user.rollNumber =
-          rollNumber;
-      }
+      if (ern !== undefined) {
+        const normalizedErn = String(ern)
+          .trim()
+          .toUpperCase();
 
-      if (ern) {
-        const normalizedErn =
-          ern
-            .trim()
-            .toUpperCase();
-
-        const existingErn =
-          await Auth.findOne({
-            ern: normalizedErn,
-            _id: {
-              $ne: user._id,
-            },
-          });
+        const existingErn = await User.findOne({
+          ern: normalizedErn,
+          _id: { $ne: user._id },
+        });
 
         if (existingErn) {
-          return res.status(400).json({
-            message:
-              "This ERN is already registered",
+          return res.status(409).json({
+            message: "ERN already registered",
           });
         }
 
-        user.ern =
-          normalizedErn;
+        user.ern = normalizedErn;
       }
     }
 
-    // =========================
-    // OTHER ROLE
-    // =========================
+    // ==================================================
+    // MENTOR PROFILE
+    // ==================================================
 
-    else {
-      return res.status(403).json({
-        message:
-          "Profile update is not allowed for this role",
-      });
+    if (user.role === "Mentor") {
+      if (department !== undefined) {
+        user.department = String(department).trim();
+      }
+
+      if (designation !== undefined) {
+        user.designation = String(designation).trim();
+      }
+
+      if (employeeId !== undefined) {
+        const normalizedEmployeeId =
+          String(employeeId).trim();
+
+        const existingEmployee = await User.findOne({
+          employeeId: normalizedEmployeeId,
+          _id: { $ne: user._id },
+        });
+
+        if (existingEmployee) {
+          return res.status(409).json({
+            message: "Employee ID already registered",
+          });
+        }
+
+        user.employeeId = normalizedEmployeeId;
+      }
+
+      if (qualification !== undefined) {
+        user.qualification =
+          String(qualification).trim();
+      }
+
+      if (experience !== undefined) {
+        user.experience = String(experience).trim();
+      }
     }
 
     await user.save();
 
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
     return res.status(200).json({
-      message:
-        "Profile updated successfully",
-
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isApproved:
-          user.isApproved,
-
-        department:
-          user.department,
-
-        designation:
-          user.designation,
-
-        employeeId:
-          user.employeeId,
-
-        qualification:
-          user.qualification,
-
-        experience:
-          user.experience,
-
-        course:
-          user.course,
-
-        division:
-          user.division,
-
-        semester:
-          user.semester,
-
-        rollNumber:
-          user.rollNumber,
-
-        ern:
-          user.ern,
-
-        mentor:
-          user.mentor || null,
-      },
+      message: "Profile updated successfully",
+      user: safeUser,
     });
   } catch (error) {
-    console.error(
-      "Update profile error:",
-      error
-    );
+    console.error("UPDATE MY PROFILE ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to update profile",
+      message: "Server error while updating profile",
+      error: error.message,
+    });
+  }
+};
+
+// ======================================================
+// ADMIN - UPDATE USER
+// ======================================================
+
+const updateUserByAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    // Admin dashboard should only edit Mentor/Mentee
+    if (!["Mentor", "Mentee"].includes(user.role)) {
+      return res.status(400).json({
+        message: "Admin users cannot be edited here",
+      });
+    }
+
+    const {
+      name,
+      email,
+      course,
+      division,
+      semester,
+      rollNumber,
+      ern,
+      department,
+      designation,
+      employeeId,
+      qualification,
+      experience,
+    } = req.body;
+
+    // ==================================================
+    // COMMON FIELDS
+    // ==================================================
+
+    if (name !== undefined) {
+      user.name = String(name).trim();
+    }
+
+    if (email !== undefined) {
+      const normalizedEmail = String(email)
+        .trim()
+        .toLowerCase();
+
+      const existingEmail = await User.findOne({
+        email: normalizedEmail,
+        _id: { $ne: user._id },
+      });
+
+      if (existingEmail) {
+        return res.status(409).json({
+          message: "Email already registered",
+        });
+      }
+
+      user.email = normalizedEmail;
+    }
+
+    // ==================================================
+    // MENTEE
+    // ==================================================
+
+    if (user.role === "Mentee") {
+      if (course !== undefined) {
+        user.course = String(course).trim();
+      }
+
+      if (division !== undefined) {
+        user.division = String(division).trim();
+      }
+
+      if (semester !== undefined) {
+        const numericSemester = Number(semester);
+
+        if (
+          Number.isNaN(numericSemester) ||
+          numericSemester < 1
+        ) {
+          return res.status(400).json({
+            message: "Invalid semester",
+          });
+        }
+
+        user.semester = numericSemester;
+      }
+
+      if (rollNumber !== undefined) {
+        user.rollNumber =
+          String(rollNumber).trim();
+      }
+
+      if (ern !== undefined) {
+        const normalizedErn = String(ern)
+          .trim()
+          .toUpperCase();
+
+        const existingErn = await User.findOne({
+          ern: normalizedErn,
+          _id: { $ne: user._id },
+        });
+
+        if (existingErn) {
+          return res.status(409).json({
+            message: "ERN already registered",
+          });
+        }
+
+        user.ern = normalizedErn;
+      }
+    }
+
+    // ==================================================
+    // MENTOR
+    // ==================================================
+
+    if (user.role === "Mentor") {
+      if (department !== undefined) {
+        user.department =
+          String(department).trim();
+      }
+
+      if (designation !== undefined) {
+        user.designation =
+          String(designation).trim();
+      }
+
+      if (employeeId !== undefined) {
+        const normalizedEmployeeId =
+          String(employeeId).trim();
+
+        const existingEmployee = await User.findOne({
+          employeeId: normalizedEmployeeId,
+          _id: { $ne: user._id },
+        });
+
+        if (existingEmployee) {
+          return res.status(409).json({
+            message: "Employee ID already registered",
+          });
+        }
+
+        user.employeeId = normalizedEmployeeId;
+      }
+
+      if (qualification !== undefined) {
+        user.qualification =
+          String(qualification).trim();
+      }
+
+      if (experience !== undefined) {
+        user.experience =
+          String(experience).trim();
+      }
+    }
+
+    await user.save();
+
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
+    return res.status(200).json({
+      message: "User updated successfully",
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("ADMIN UPDATE USER ERROR:", error);
+
+    return res.status(500).json({
+      message: "Server error while updating user",
       error: error.message,
     });
   }
@@ -842,35 +719,24 @@ const updateMyProfile = async (
 // GET MY MENTEES
 // ======================================================
 
-const getMyMentees = async (
-  req,
-  res
-) => {
+const getMyMentees = async (req, res) => {
   try {
-    const mentees =
-      await Auth.find({
-        role: "Mentee",
-        isApproved: true,
-        mentor: req.user.id,
-      }).select(
-        "name email course division semester rollNumber ern mentor"
-      );
+    const mentees = await User.find({
+      role: "Mentee",
+      mentor: req.user.id,
+      isApproved: true,
+    })
+      .select("-password")
+      .sort({ name: 1 });
 
     return res.status(200).json({
-      message:
-        "Mentees fetched successfully",
-
       mentees,
     });
   } catch (error) {
-    console.error(
-      "Get my mentees error:",
-      error
-    );
+    console.error("GET MY MENTEES ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to fetch mentees",
+      message: "Server error while fetching mentees",
       error: error.message,
     });
   }
@@ -880,236 +746,145 @@ const getMyMentees = async (
 // ASSIGN ONE MENTEE
 // ======================================================
 
-const assignMentee = async (
-  req,
-  res
-) => {
+const assignMentee = async (req, res) => {
   try {
-    const {
-      menteeId,
-      mentorId,
-    } = req.body;
+    const { menteeId, mentorId } = req.body;
 
-    if (
-      !menteeId ||
-      !mentorId
-    ) {
+    if (!menteeId || !mentorId) {
       return res.status(400).json({
-        message:
-          "menteeId and mentorId are required",
+        message: "Mentee ID and mentor ID are required",
       });
     }
 
-    const mentee =
-      await Auth.findById(
-        menteeId
-      );
-
-    const mentor =
-      await Auth.findById(
-        mentorId
-      );
+    const mentee = await User.findOne({
+      _id: menteeId,
+      role: "Mentee",
+    });
 
     if (!mentee) {
       return res.status(404).json({
-        message:
-          "Mentee not found",
+        message: "Mentee not found",
       });
     }
+
+    const mentor = await User.findOne({
+      _id: mentorId,
+      role: "Mentor",
+      isApproved: true,
+    });
 
     if (!mentor) {
       return res.status(404).json({
-        message:
-          "Mentor not found",
+        message: "Approved mentor not found",
       });
     }
 
-    if (
-      mentee.role !==
-      "Mentee"
-    ) {
-      return res.status(400).json({
-        message:
-          "Selected user is not a mentee",
-      });
-    }
-
-    if (
-      !mentee.isApproved
-    ) {
-      return res.status(400).json({
-        message:
-          "Mentee is not approved",
-      });
-    }
-
-    if (
-      mentor.role !==
-      "Mentor"
-    ) {
-      return res.status(400).json({
-        message:
-          "Selected user is not a mentor",
-      });
-    }
-
-    if (
-      !mentor.isApproved
-    ) {
-      return res.status(400).json({
-        message:
-          "Mentor is not approved",
-      });
-    }
-
-    mentee.mentor =
-      mentor._id;
+    mentee.mentor = mentor._id;
 
     await mentee.save();
 
-    return res.status(200).json({
-      message:
-        "Mentee assigned successfully",
+    const safeUser = mentee.toObject();
+    delete safeUser.password;
 
-      mentee: {
-        id: mentee._id,
-        name: mentee.name,
-        mentor: mentor.name,
-      },
+    return res.status(200).json({
+      message: "Mentee assigned successfully",
+      mentee: safeUser,
     });
   } catch (error) {
-    console.error(
-      "Assign mentee error:",
-      error
-    );
+    console.error("ASSIGN MENTEE ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to assign mentee",
+      message: "Server error while assigning mentee",
       error: error.message,
     });
   }
 };
 
 // ======================================================
-// REJECT PENDING USER
+// REJECT USER
 // ======================================================
 
-const rejectUser = async (
-  req,
-  res
-) => {
+const rejectUser = async (req, res) => {
   try {
-    const { id } =
-      req.params;
+    const { id } = req.params;
 
-    const user =
-      await Auth.findById(id);
+    const user = await User.findById(id);
 
     if (!user) {
       return res.status(404).json({
-        message:
-          "User not found",
+        message: "User not found",
       });
     }
 
     if (user.isApproved) {
       return res.status(400).json({
-        message:
-          "Approved user cannot be rejected. Use remove user instead.",
+        message: "Approved users cannot be rejected",
       });
     }
 
-    await Auth.findByIdAndDelete(
-      id
-    );
+    await User.findByIdAndDelete(id);
 
     return res.status(200).json({
-      message:
-        "User rejected successfully",
+      message: "Registration rejected and removed",
     });
   } catch (error) {
-    console.error(
-      "Reject user error:",
-      error
-    );
+    console.error("REJECT USER ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to reject user",
+      message: "Server error while rejecting user",
       error: error.message,
     });
   }
 };
 
 // ======================================================
-// REMOVE APPROVED USER
+// REMOVE USER
 // ======================================================
 
-const removeUser = async (
-  req,
-  res
-) => {
+const removeUser = async (req, res) => {
   try {
-    const { id } =
-      req.params;
+    const { id } = req.params;
 
-    const user =
-      await Auth.findById(id);
+    const user = await User.findById(id);
 
     if (!user) {
       return res.status(404).json({
-        message:
-          "User not found",
+        message: "User not found",
       });
     }
 
-    // Admin account cannot be removed
-    if (
-      user.role === "Admin"
-    ) {
-      return res.status(400).json({
-        message:
-          "Admin account cannot be removed",
+    // Never allow Admin account deletion
+    if (user.role === "Admin") {
+      return res.status(403).json({
+        message: "Admin users cannot be removed",
       });
     }
 
-    // =========================
-    // IF MENTOR IS REMOVED
-    // =========================
-
-    if (
-      user.role === "Mentor"
-    ) {
-      await Auth.updateMany(
+    // If removing mentor, unassign their mentees
+    if (user.role === "Mentor") {
+      await User.updateMany(
         {
+          role: "Mentee",
           mentor: user._id,
         },
         {
-          $unset: {
-            mentor: 1,
+          $set: {
+            mentor: null,
           },
         }
       );
     }
 
-    await Auth.findByIdAndDelete(
-      id
-    );
+    await User.findByIdAndDelete(id);
 
     return res.status(200).json({
-      message:
-        `${user.role} removed successfully`,
+      message: `${user.role} removed successfully`,
     });
   } catch (error) {
-    console.error(
-      "Remove user error:",
-      error
-    );
+    console.error("REMOVE USER ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to remove user",
+      message: "Server error while removing user",
       error: error.message,
     });
   }
@@ -1119,147 +894,115 @@ const removeUser = async (
 // GET MENTEE GROUPS
 // ======================================================
 
-const getMenteeGroups = async (
-  req,
-  res
-) => {
+const getMenteeGroups = async (req, res) => {
   try {
-    const mentees =
-      await Auth.find({
-        role: "Mentee",
-        isApproved: true,
-      }).select(
-        "_id name email course division semester rollNumber mentor ern"
-      );
+    const mentees = await User.find({
+      role: "Mentee",
+      isApproved: true,
+    })
+      .select(
+        "name email course division semester rollNumber ern mentor"
+      )
+      .populate(
+        "mentor",
+        "name email department designation employeeId"
+      )
+      .sort({
+        course: 1,
+        division: 1,
+        name: 1,
+      });
 
     const groups = {};
 
-    mentees.forEach(
-      (mentee) => {
-        const course =
-          mentee.course?.trim() ||
-          "Unknown Course";
+    mentees.forEach((mentee) => {
+      const course = mentee.course || "Unknown Course";
+      const division =
+        mentee.division || "Unknown Division";
 
-        const division =
-          mentee.division?.trim() ||
-          "Unknown Division";
+      const key = `${course}-${division}`;
 
-        const groupKey =
-          `${course}-${division}`;
-
-        if (
-          !groups[groupKey]
-        ) {
-          groups[groupKey] = {
-            course,
-            division,
-            students: [],
-          };
-        }
-
-        groups[groupKey].students.push(
-          mentee
-        );
+      if (!groups[key]) {
+        groups[key] = {
+          course,
+          division,
+          mentees: [],
+        };
       }
-    );
+
+      groups[key].mentees.push(mentee);
+    });
 
     return res.status(200).json({
-      message:
-        "Mentee groups fetched successfully",
-
-      groups:
-        Object.values(groups),
+      groups: Object.values(groups),
     });
   } catch (error) {
-    console.error(
-      "Get mentee groups error:",
-      error
-    );
+    console.error("GET MENTEE GROUPS ERROR:", error);
 
     return res.status(500).json({
       message:
-        "Failed to fetch mentee groups",
+        "Server error while fetching mentee groups",
       error: error.message,
     });
   }
 };
 
 // ======================================================
-// BULK ASSIGN MENTEES
+// ASSIGN MULTIPLE MENTEES
 // ======================================================
 
-const assignMentees = async (
-  req,
-  res
-) => {
+const assignMentees = async (req, res) => {
   try {
-    const {
-      mentorId,
-      menteeIds,
-    } = req.body;
+    const { menteeIds, mentorId } = req.body;
 
     if (
-      !mentorId ||
-      !Array.isArray(
-        menteeIds
-      ) ||
-      menteeIds.length === 0
+      !Array.isArray(menteeIds) ||
+      menteeIds.length === 0 ||
+      !mentorId
     ) {
       return res.status(400).json({
         message:
-          "mentorId and menteeIds are required",
+          "Mentee IDs and mentor ID are required",
       });
     }
 
-    const mentor =
-      await Auth.findOne({
-        _id: mentorId,
-        role: "Mentor",
-        isApproved: true,
-      });
+    const mentor = await User.findOne({
+      _id: mentorId,
+      role: "Mentor",
+      isApproved: true,
+    });
 
     if (!mentor) {
       return res.status(404).json({
-        message:
-          "Approved mentor not found",
+        message: "Approved mentor not found",
       });
     }
 
-    const result =
-      await Auth.updateMany(
-        {
-          _id: {
-            $in: menteeIds,
-          },
-
-          role: "Mentee",
-
-          isApproved: true,
+    const result = await User.updateMany(
+      {
+        _id: {
+          $in: menteeIds,
         },
-        {
-          $set: {
-            mentor:
-              mentor._id,
-          },
-        }
-      );
+        role: "Mentee",
+        isApproved: true,
+      },
+      {
+        $set: {
+          mentor: mentor._id,
+        },
+      }
+    );
 
     return res.status(200).json({
-      message:
-        `${result.modifiedCount} mentees assigned successfully`,
-
-      assignedCount:
-        result.modifiedCount,
+      message: "Mentees assigned successfully",
+      modifiedCount: result.modifiedCount,
     });
   } catch (error) {
-    console.error(
-      "Assign mentees error:",
-      error
-    );
+    console.error("ASSIGN MENTEES ERROR:", error);
 
     return res.status(500).json({
       message:
-        "Failed to assign mentees",
+        "Server error while assigning mentees",
       error: error.message,
     });
   }
@@ -1269,69 +1012,36 @@ const assignMentees = async (
 // GET MY MENTOR
 // ======================================================
 
-const getMyMentor = async (
-  req,
-  res
-) => {
+const getMyMentor = async (req, res) => {
   try {
-    const mentee =
-      await Auth.findById(
-        req.user.id
+    const mentee = await User.findById(req.user.id)
+      .select("mentor")
+      .populate(
+        "mentor",
+        "name email department designation employeeId qualification experience"
       );
 
     if (!mentee) {
       return res.status(404).json({
-        message:
-          "Mentee not found",
-      });
-    }
-
-    if (
-      mentee.role !==
-      "Mentee"
-    ) {
-      return res.status(403).json({
-        message:
-          "Only mentees can access their mentor",
+        message: "Mentee not found",
       });
     }
 
     if (!mentee.mentor) {
-      return res.status(404).json({
-        message:
-          "No mentor assigned yet",
-      });
-    }
-
-    const mentor =
-      await Auth.findById(
-        mentee.mentor
-      ).select(
-        "name email department designation employeeId qualification experience"
-      );
-
-    if (!mentor) {
-      return res.status(404).json({
-        message:
-          "Mentor not found",
+      return res.status(200).json({
+        mentor: null,
+        message: "No mentor assigned yet",
       });
     }
 
     return res.status(200).json({
-      message:
-        "Mentor fetched successfully",
-
-      mentor,
+      mentor: mentee.mentor,
     });
   } catch (error) {
-    console.error(
-      "Get my mentor error:",
-      error
-    );
+    console.error("GET MY MENTOR ERROR:", error);
 
     return res.status(500).json({
-      message:
-        "Failed to fetch mentor",
+      message: "Server error while fetching mentor",
       error: error.message,
     });
   }
@@ -1349,6 +1059,7 @@ export {
   getAllUsers,
   getMyProfile,
   updateMyProfile,
+  updateUserByAdmin,
   getMyMentees,
   assignMentee,
   rejectUser,
