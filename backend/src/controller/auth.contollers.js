@@ -41,9 +41,12 @@ const registerUser = async (req, res) => {
       });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = String(email)
+      .trim()
+      .toLowerCase();
 
-    const existingUser = await User.findOne({
+    // Check existing email
+    const existingUser = await Auth.findOne({
       email: normalizedEmail,
     });
 
@@ -71,9 +74,11 @@ const registerUser = async (req, res) => {
         });
       }
 
-      const normalizedErn = String(ern).trim().toUpperCase();
+      const normalizedErn = String(ern)
+        .trim()
+        .toUpperCase();
 
-      const existingErn = await User.findOne({
+      const existingErn = await Auth.findOne({
         ern: normalizedErn,
       });
 
@@ -89,18 +94,14 @@ const registerUser = async (req, res) => {
     // ==================================================
 
     if (normalizedRole === "Mentor") {
-      if (
-        !department ||
-        !designation ||
-        !employeeId
-      ) {
+      if (!department || !designation || !employeeId) {
         return res.status(400).json({
           message:
             "Department, designation and employee ID are required for mentor",
         });
       }
 
-      const existingEmployee = await User.findOne({
+      const existingEmployee = await Auth.findOne({
         employeeId: String(employeeId).trim(),
       });
 
@@ -118,7 +119,7 @@ const registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // ==================================================
-    // CREATE USER
+    // CREATE USER DATA
     // ==================================================
 
     const userData = {
@@ -129,32 +130,48 @@ const registerUser = async (req, res) => {
       isApproved: normalizedRole === "Admin",
     };
 
-    // Mentee fields
+    // ==================================================
+    // MENTEE FIELDS
+    // ==================================================
+
     if (normalizedRole === "Mentee") {
       userData.course = String(course).trim();
       userData.division = String(division).trim();
       userData.semester = Number(semester);
       userData.rollNumber = String(rollNumber).trim();
-      userData.ern = String(ern).trim().toUpperCase();
+      userData.ern = String(ern)
+        .trim()
+        .toUpperCase();
+
       userData.mentor = null;
     }
 
-    // Mentor fields
+    // ==================================================
+    // MENTOR FIELDS
+    // ==================================================
+
     if (normalizedRole === "Mentor") {
       userData.department = String(department).trim();
       userData.designation = String(designation).trim();
       userData.employeeId = String(employeeId).trim();
+
       userData.qualification = qualification
         ? String(qualification).trim()
         : "";
+
       userData.experience = experience
         ? String(experience).trim()
         : "";
     }
 
-    const user = await User.create(userData);
+    // ==================================================
+    // SAVE USER
+    // ==================================================
+
+    const user = await Auth.create(userData);
 
     const safeUser = user.toObject();
+
     delete safeUser.password;
 
     return res.status(201).json({
@@ -162,6 +179,7 @@ const registerUser = async (req, res) => {
         normalizedRole === "Admin"
           ? "Admin registered successfully"
           : "Registration successful. Waiting for admin approval.",
+
       user: safeUser,
     });
   } catch (error) {
@@ -192,7 +210,7 @@ const loginUser = async (req, res) => {
       .trim()
       .toLowerCase();
 
-    const user = await User.findOne({
+    const user = await Auth.findOne({
       email: normalizedEmail,
     });
 
@@ -202,6 +220,7 @@ const loginUser = async (req, res) => {
       });
     }
 
+    // Compare hashed password
     const passwordMatch = await bcrypt.compare(
       password,
       user.password
@@ -213,6 +232,7 @@ const loginUser = async (req, res) => {
       });
     }
 
+    // Approval check
     if (!user.isApproved) {
       return res.status(403).json({
         message:
@@ -220,6 +240,16 @@ const loginUser = async (req, res) => {
       });
     }
 
+    // JWT secret check
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is missing");
+
+      return res.status(500).json({
+        message: "JWT_SECRET is missing in .env",
+      });
+    }
+
+    // Create token
     const token = jwt.sign(
       {
         id: user._id,
@@ -232,6 +262,7 @@ const loginUser = async (req, res) => {
     );
 
     const safeUser = user.toObject();
+
     delete safeUser.password;
 
     return res.status(200).json({
@@ -257,7 +288,7 @@ const approveUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id);
+    const user = await Auth.findById(id);
 
     if (!user) {
       return res.status(404).json({
@@ -270,6 +301,7 @@ const approveUser = async (req, res) => {
     await user.save();
 
     const safeUser = user.toObject();
+
     delete safeUser.password;
 
     return res.status(200).json({
@@ -292,7 +324,7 @@ const approveUser = async (req, res) => {
 
 const getPendingUsers = async (req, res) => {
   try {
-    const users = await User.find({
+    const users = await Auth.find({
       isApproved: false,
       role: {
         $in: ["Mentor", "Mentee"],
@@ -320,7 +352,7 @@ const getPendingUsers = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({
+    const users = await Auth.find({
       role: {
         $in: ["Mentor", "Mentee"],
       },
@@ -347,7 +379,7 @@ const getAllUsers = async (req, res) => {
 
 const getMyProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id)
+    const user = await Auth.findById(req.user.id)
       .select("-password")
       .populate(
         "mentor",
@@ -379,7 +411,7 @@ const getMyProfile = async (req, res) => {
 
 const updateMyProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await Auth.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({
@@ -402,26 +434,22 @@ const updateMyProfile = async (req, res) => {
       experience,
     } = req.body;
 
-    // ==================================================
     // NAME
-    // ==================================================
-
     if (name !== undefined) {
       user.name = String(name).trim();
     }
 
-    // ==================================================
     // EMAIL
-    // ==================================================
-
     if (email !== undefined) {
       const normalizedEmail = String(email)
         .trim()
         .toLowerCase();
 
-      const existingEmail = await User.findOne({
+      const existingEmail = await Auth.findOne({
         email: normalizedEmail,
-        _id: { $ne: user._id },
+        _id: {
+          $ne: user._id,
+        },
       });
 
       if (existingEmail) {
@@ -447,7 +475,18 @@ const updateMyProfile = async (req, res) => {
       }
 
       if (semester !== undefined) {
-        user.semester = Number(semester);
+        const numericSemester = Number(semester);
+
+        if (
+          Number.isNaN(numericSemester) ||
+          numericSemester < 1
+        ) {
+          return res.status(400).json({
+            message: "Invalid semester",
+          });
+        }
+
+        user.semester = numericSemester;
       }
 
       if (rollNumber !== undefined) {
@@ -459,9 +498,11 @@ const updateMyProfile = async (req, res) => {
           .trim()
           .toUpperCase();
 
-        const existingErn = await User.findOne({
+        const existingErn = await Auth.findOne({
           ern: normalizedErn,
-          _id: { $ne: user._id },
+          _id: {
+            $ne: user._id,
+          },
         });
 
         if (existingErn) {
@@ -491,189 +532,11 @@ const updateMyProfile = async (req, res) => {
         const normalizedEmployeeId =
           String(employeeId).trim();
 
-        const existingEmployee = await User.findOne({
+        const existingEmployee = await Auth.findOne({
           employeeId: normalizedEmployeeId,
-          _id: { $ne: user._id },
-        });
-
-        if (existingEmployee) {
-          return res.status(409).json({
-            message: "Employee ID already registered",
-          });
-        }
-
-        user.employeeId = normalizedEmployeeId;
-      }
-
-      if (qualification !== undefined) {
-        user.qualification =
-          String(qualification).trim();
-      }
-
-      if (experience !== undefined) {
-        user.experience = String(experience).trim();
-      }
-    }
-
-    await user.save();
-
-    const safeUser = user.toObject();
-    delete safeUser.password;
-
-    return res.status(200).json({
-      message: "Profile updated successfully",
-      user: safeUser,
-    });
-  } catch (error) {
-    console.error("UPDATE MY PROFILE ERROR:", error);
-
-    return res.status(500).json({
-      message: "Server error while updating profile",
-      error: error.message,
-    });
-  }
-};
-
-// ======================================================
-// ADMIN - UPDATE USER
-// ======================================================
-
-const updateUserByAdmin = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const user = await User.findById(id);
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
-    }
-
-    // Admin dashboard should only edit Mentor/Mentee
-    if (!["Mentor", "Mentee"].includes(user.role)) {
-      return res.status(400).json({
-        message: "Admin users cannot be edited here",
-      });
-    }
-
-    const {
-      name,
-      email,
-      course,
-      division,
-      semester,
-      rollNumber,
-      ern,
-      department,
-      designation,
-      employeeId,
-      qualification,
-      experience,
-    } = req.body;
-
-    // ==================================================
-    // COMMON FIELDS
-    // ==================================================
-
-    if (name !== undefined) {
-      user.name = String(name).trim();
-    }
-
-    if (email !== undefined) {
-      const normalizedEmail = String(email)
-        .trim()
-        .toLowerCase();
-
-      const existingEmail = await User.findOne({
-        email: normalizedEmail,
-        _id: { $ne: user._id },
-      });
-
-      if (existingEmail) {
-        return res.status(409).json({
-          message: "Email already registered",
-        });
-      }
-
-      user.email = normalizedEmail;
-    }
-
-    // ==================================================
-    // MENTEE
-    // ==================================================
-
-    if (user.role === "Mentee") {
-      if (course !== undefined) {
-        user.course = String(course).trim();
-      }
-
-      if (division !== undefined) {
-        user.division = String(division).trim();
-      }
-
-      if (semester !== undefined) {
-        const numericSemester = Number(semester);
-
-        if (
-          Number.isNaN(numericSemester) ||
-          numericSemester < 1
-        ) {
-          return res.status(400).json({
-            message: "Invalid semester",
-          });
-        }
-
-        user.semester = numericSemester;
-      }
-
-      if (rollNumber !== undefined) {
-        user.rollNumber =
-          String(rollNumber).trim();
-      }
-
-      if (ern !== undefined) {
-        const normalizedErn = String(ern)
-          .trim()
-          .toUpperCase();
-
-        const existingErn = await User.findOne({
-          ern: normalizedErn,
-          _id: { $ne: user._id },
-        });
-
-        if (existingErn) {
-          return res.status(409).json({
-            message: "ERN already registered",
-          });
-        }
-
-        user.ern = normalizedErn;
-      }
-    }
-
-    // ==================================================
-    // MENTOR
-    // ==================================================
-
-    if (user.role === "Mentor") {
-      if (department !== undefined) {
-        user.department =
-          String(department).trim();
-      }
-
-      if (designation !== undefined) {
-        user.designation =
-          String(designation).trim();
-      }
-
-      if (employeeId !== undefined) {
-        const normalizedEmployeeId =
-          String(employeeId).trim();
-
-        const existingEmployee = await User.findOne({
-          employeeId: normalizedEmployeeId,
-          _id: { $ne: user._id },
+          _id: {
+            $ne: user._id,
+          },
         });
 
         if (existingEmployee) {
@@ -699,6 +562,183 @@ const updateUserByAdmin = async (req, res) => {
     await user.save();
 
     const safeUser = user.toObject();
+
+    delete safeUser.password;
+
+    return res.status(200).json({
+      message: "Profile updated successfully",
+      user: safeUser,
+    });
+  } catch (error) {
+    console.error("UPDATE MY PROFILE ERROR:", error);
+
+    return res.status(500).json({
+      message: "Server error while updating profile",
+      error: error.message,
+    });
+  }
+};
+
+// ======================================================
+// ADMIN - UPDATE USER
+// ======================================================
+
+const updateUserByAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await Auth.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    if (!["Mentor", "Mentee"].includes(user.role)) {
+      return res.status(400).json({
+        message: "Admin users cannot be edited here",
+      });
+    }
+
+    const {
+      name,
+      email,
+      course,
+      division,
+      semester,
+      rollNumber,
+      ern,
+      department,
+      designation,
+      employeeId,
+      qualification,
+      experience,
+    } = req.body;
+
+    if (name !== undefined) {
+      user.name = String(name).trim();
+    }
+
+    if (email !== undefined) {
+      const normalizedEmail = String(email)
+        .trim()
+        .toLowerCase();
+
+      const existingEmail = await Auth.findOne({
+        email: normalizedEmail,
+        _id: {
+          $ne: user._id,
+        },
+      });
+
+      if (existingEmail) {
+        return res.status(409).json({
+          message: "Email already registered",
+        });
+      }
+
+      user.email = normalizedEmail;
+    }
+
+    // MENTEE
+    if (user.role === "Mentee") {
+      if (course !== undefined) {
+        user.course = String(course).trim();
+      }
+
+      if (division !== undefined) {
+        user.division = String(division).trim();
+      }
+
+      if (semester !== undefined) {
+        const numericSemester = Number(semester);
+
+        if (
+          Number.isNaN(numericSemester) ||
+          numericSemester < 1
+        ) {
+          return res.status(400).json({
+            message: "Invalid semester",
+          });
+        }
+
+        user.semester = numericSemester;
+      }
+
+      if (rollNumber !== undefined) {
+        user.rollNumber = String(rollNumber).trim();
+      }
+
+      if (ern !== undefined) {
+        const normalizedErn = String(ern)
+          .trim()
+          .toUpperCase();
+
+        const existingErn = await Auth.findOne({
+          ern: normalizedErn,
+          _id: {
+            $ne: user._id,
+          },
+        });
+
+        if (existingErn) {
+          return res.status(409).json({
+            message: "ERN already registered",
+          });
+        }
+
+        user.ern = normalizedErn;
+      }
+    }
+
+    // MENTOR
+    if (user.role === "Mentor") {
+      if (department !== undefined) {
+        user.department =
+          String(department).trim();
+      }
+
+      if (designation !== undefined) {
+        user.designation =
+          String(designation).trim();
+      }
+
+      if (employeeId !== undefined) {
+        const normalizedEmployeeId =
+          String(employeeId).trim();
+
+        const existingEmployee = await Auth.findOne({
+          employeeId: normalizedEmployeeId,
+          _id: {
+            $ne: user._id,
+          },
+        });
+
+        if (existingEmployee) {
+          return res.status(409).json({
+            message: "Employee ID already registered",
+          });
+        }
+
+        user.employeeId = normalizedEmployeeId;
+      }
+
+      if (qualification !== undefined) {
+        user.qualification =
+          String(qualification).trim();
+      }
+
+      if (experience !== undefined) {
+        user.experience =
+          String(experience).trim();
+      }
+    }
+
+    await user.save();
+
+    const safeUser = user.toObject();
+
     delete safeUser.password;
 
     return res.status(200).json({
@@ -721,7 +761,7 @@ const updateUserByAdmin = async (req, res) => {
 
 const getMyMentees = async (req, res) => {
   try {
-    const mentees = await User.find({
+    const mentees = await Auth.find({
       role: "Mentee",
       mentor: req.user.id,
       isApproved: true,
@@ -756,7 +796,7 @@ const assignMentee = async (req, res) => {
       });
     }
 
-    const mentee = await User.findOne({
+    const mentee = await Auth.findOne({
       _id: menteeId,
       role: "Mentee",
     });
@@ -767,7 +807,7 @@ const assignMentee = async (req, res) => {
       });
     }
 
-    const mentor = await User.findOne({
+    const mentor = await Auth.findOne({
       _id: mentorId,
       role: "Mentor",
       isApproved: true,
@@ -784,6 +824,7 @@ const assignMentee = async (req, res) => {
     await mentee.save();
 
     const safeUser = mentee.toObject();
+
     delete safeUser.password;
 
     return res.status(200).json({
@@ -808,7 +849,7 @@ const rejectUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id);
+    const user = await Auth.findById(id);
 
     if (!user) {
       return res.status(404).json({
@@ -822,7 +863,7 @@ const rejectUser = async (req, res) => {
       });
     }
 
-    await User.findByIdAndDelete(id);
+    await Auth.findByIdAndDelete(id);
 
     return res.status(200).json({
       message: "Registration rejected and removed",
@@ -845,7 +886,7 @@ const removeUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id);
+    const user = await Auth.findById(id);
 
     if (!user) {
       return res.status(404).json({
@@ -853,16 +894,16 @@ const removeUser = async (req, res) => {
       });
     }
 
-    // Never allow Admin account deletion
+    // Never delete Admin
     if (user.role === "Admin") {
       return res.status(403).json({
         message: "Admin users cannot be removed",
       });
     }
 
-    // If removing mentor, unassign their mentees
+    // If mentor is removed, unassign mentees
     if (user.role === "Mentor") {
-      await User.updateMany(
+      await Auth.updateMany(
         {
           role: "Mentee",
           mentor: user._id,
@@ -875,7 +916,7 @@ const removeUser = async (req, res) => {
       );
     }
 
-    await User.findByIdAndDelete(id);
+    await Auth.findByIdAndDelete(id);
 
     return res.status(200).json({
       message: `${user.role} removed successfully`,
@@ -896,7 +937,7 @@ const removeUser = async (req, res) => {
 
 const getMenteeGroups = async (req, res) => {
   try {
-    const mentees = await User.find({
+    const mentees = await Auth.find({
       role: "Mentee",
       isApproved: true,
     })
@@ -916,7 +957,9 @@ const getMenteeGroups = async (req, res) => {
     const groups = {};
 
     mentees.forEach((mentee) => {
-      const course = mentee.course || "Unknown Course";
+      const course =
+        mentee.course || "Unknown Course";
+
       const division =
         mentee.division || "Unknown Division";
 
@@ -966,7 +1009,7 @@ const assignMentees = async (req, res) => {
       });
     }
 
-    const mentor = await User.findOne({
+    const mentor = await Auth.findOne({
       _id: mentorId,
       role: "Mentor",
       isApproved: true,
@@ -978,7 +1021,7 @@ const assignMentees = async (req, res) => {
       });
     }
 
-    const result = await User.updateMany(
+    const result = await Auth.updateMany(
       {
         _id: {
           $in: menteeIds,
@@ -1014,7 +1057,7 @@ const assignMentees = async (req, res) => {
 
 const getMyMentor = async (req, res) => {
   try {
-    const mentee = await User.findById(req.user.id)
+    const mentee = await Auth.findById(req.user.id)
       .select("mentor")
       .populate(
         "mentor",
