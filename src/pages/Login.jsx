@@ -19,6 +19,8 @@ function Login() {
     password: "",
   });
 
+  const [loading, setLoading] = useState(false);
+
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -29,128 +31,148 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Get backend API URL from Vercel/Vite environment variable
-    const API = import.meta.env.VITE_API_URL  || 
-    "https://mentorconnect-a7c8.onrender.com/api";
-
-    console.log("API URL:", API);
-
-    if (!API) {
-      alert("API URL is not configured.");
-      console.error("VITE_API_URL is missing.");
+    if (!formData.email || !formData.password) {
+      alert("Please enter email and password.");
       return;
     }
+
+    setLoading(true);
+
+    // YOUR DEPLOYED BACKEND API
+    const API = "https://mentorconnect-a7c8.onrender.com/api";
+
+    console.log("API URL:", JSON.stringify(API));
+    console.log("Login URL:", `${API}/auth/login`);
 
     try {
       const response = await fetch(`${API}/auth/login`, {
         method: "POST",
-
         headers: {
           "Content-Type": "application/json",
         },
-
         body: JSON.stringify({
-          email: formData.email,
+          email: formData.email.trim(),
           password: formData.password,
         }),
       });
 
-      const data = await response.json();
+      console.log("Response status:", response.status);
 
-      console.log("Login response:", data);
+      // Get response as text first
+      const text = await response.text();
 
-      if (!response.ok) {
-        alert(data.message || "Login failed");
+      console.log("Server response:", text);
+
+      let data;
+
+      // Convert response to JSON safely
+      try {
+        data = JSON.parse(text);
+      } catch (jsonError) {
+        console.error("JSON parse error:", jsonError);
+        console.error("Actual server response:", text);
+
+        alert(
+          `Server ne JSON response nahi diya.\nStatus: ${response.status}`
+        );
+
+        setLoading(false);
         return;
       }
 
-      // Save JWT token
+      console.log("Parsed response:", data);
+
+      // Login failed
+      if (!response.ok) {
+        alert(data.message || "Login failed.");
+        setLoading(false);
+        return;
+      }
+
+      // Check token
+      if (!data.token) {
+        alert("Login successful but token nahi mila.");
+        console.error("Token missing:", data);
+        setLoading(false);
+        return;
+      }
+
+      // Save login information
       sessionStorage.setItem("token", data.token);
 
-      // Save user information
-      sessionStorage.setItem(
-        "user",
-        JSON.stringify(data.user)
-      );
+      if (data.user) {
+        sessionStorage.setItem("user", JSON.stringify(data.user));
+      }
 
-      alert(data.message || "Login successful");
+      console.log("Login successful:", data);
 
-      // Role-based navigation
-      if (data.user.role === "Admin") {
+      alert(data.message || "Login successful!");
+
+      // Redirect according to role
+      if (data.user?.role === "Admin") {
         navigate("/admin/dashboard");
-      } else if (data.user.role === "Mentor") {
+      } else if (data.user?.role === "Mentor") {
         navigate("/mentor/dashboard");
-      } else if (data.user.role === "Mentee") {
+      } else if (data.user?.role === "Mentee") {
         navigate("/mentee/dashboard");
       } else {
         alert("Invalid user role.");
       }
-
     } catch (error) {
       console.error("Login error:", error);
-      alert("Server se connect nahi ho pa raha.");
+
+      alert(
+        "Backend se connection nahi ho pa raha.\n\nPlease check your backend server."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#050816] px-5 py-8 text-white sm:px-6">
+    <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4 py-8">
 
-      {/* Background glow */}
-      <div className="pointer-events-none fixed inset-0 -z-0 overflow-hidden">
+      <div className="w-full max-w-md">
 
-        <div className="absolute left-1/2 top-[-180px] h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-blue-600/15 blur-[130px]" />
-
-        <div className="absolute bottom-[-150px] left-[-100px] h-[350px] w-[350px] rounded-full bg-cyan-500/10 blur-[120px]" />
-
-      </div>
-
-      {/* Top */}
-      <div className="relative z-10 mx-auto max-w-6xl">
-
+        {/* Back Button */}
         <Link
           to="/"
-          className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-blue-400"
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-cyan-400 mb-6 transition"
         >
-          <ArrowLeft size={17} />
-          Back to home
+          <ArrowLeft size={18} />
+          Back to Home
         </Link>
 
-      </div>
+        {/* Login Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8">
 
-      {/* Login */}
-      <main className="relative z-10 flex min-h-[calc(100vh-80px)] items-center justify-center py-10">
-
-        <div className="w-full max-w-md">
-
-          {/* Heading */}
-          <div className="mb-8 text-center">
-
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 shadow-lg shadow-blue-500/25">
-
-              <GraduationCap size={24} />
-
+          {/* Logo */}
+          <div className="flex justify-center mb-5">
+            <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+              <GraduationCap
+                size={34}
+                className="text-cyan-400"
+              />
             </div>
-
-            <h1 className="mt-5 text-3xl font-bold sm:text-4xl">
-              Welcome back
-            </h1>
-
-            <p className="mt-3 text-sm leading-6 text-slate-400">
-              Login to continue to your MentorConnect account.
-            </p>
-
           </div>
 
-          {/* Form */}
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-6 shadow-2xl shadow-black/20 sm:p-8"
-          >
+          {/* Heading */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-white">
+              Welcome Back
+            </h1>
+
+            <p className="text-slate-400 mt-2">
+              Login to your MentorConnect account
+            </p>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
 
             {/* Email */}
             <div>
-
-              <label className="text-sm font-medium text-slate-300">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Email Address
               </label>
 
@@ -159,37 +181,19 @@ function Login() {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="you@example.com"
+                placeholder="Enter your email"
+                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
                 required
-                className="mt-2 w-full rounded-xl border border-white/10 bg-[#080d1c] px-4 py-3 text-sm outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
               />
-
             </div>
 
             {/* Password */}
-            <div className="mt-5">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Password
+              </label>
 
-              <div className="flex items-center justify-between">
-
-                <label className="text-sm font-medium text-slate-300">
-                  Password
-                </label>
-
-                <button
-                  type="button"
-                  className="text-xs text-blue-400 transition hover:text-blue-300"
-                  onClick={() =>
-                    alert(
-                      "Forgot password will be connected with the backend later."
-                    )
-                  }
-                >
-                  Forgot password?
-                </button>
-
-              </div>
-
-              <div className="relative mt-2">
+              <div className="relative">
 
                 <input
                   type={showPassword ? "text" : "password"}
@@ -197,8 +201,8 @@ function Login() {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Enter your password"
+                  className="w-full px-4 py-3 pr-12 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
                   required
-                  className="w-full rounded-xl border border-white/10 bg-[#080d1c] px-4 py-3 pr-12 text-sm outline-none transition placeholder:text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                 />
 
                 <button
@@ -206,72 +210,80 @@ function Login() {
                   onClick={() =>
                     setShowPassword(!showPassword)
                   }
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-blue-400"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-400 transition"
                 >
                   {showPassword ? (
-                    <EyeOff size={18} />
+                    <EyeOff size={20} />
                   ) : (
-                    <Eye size={18} />
+                    <Eye size={20} />
                   )}
                 </button>
 
               </div>
-
             </div>
 
-            {/* Approval notice */}
-            <div className="mt-6 flex gap-3 rounded-xl border border-blue-400/10 bg-blue-500/[0.04] p-4">
-
-              <ShieldCheck
-                size={18}
-                className="mt-0.5 shrink-0 text-blue-400"
-              />
-
-              <p className="text-xs leading-5 text-slate-500">
-                Your account must be approved by the college admin before
-                you can access MentorConnect.
-              </p>
-
-            </div>
-
-            {/* Login button */}
+            {/* Login Button */}
             <button
               type="submit"
-              className="group mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-semibold shadow-lg shadow-blue-600/20 transition hover:bg-blue-500"
+              disabled={loading}
+              className="w-full py-3.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:bg-cyan-700 disabled:cursor-not-allowed text-slate-950 font-semibold flex items-center justify-center gap-2 transition"
             >
-              Login
-
-              <ArrowRight
-                size={17}
-                className="transition-transform group-hover:translate-x-1"
-              />
-
+              {loading ? (
+                "Logging in..."
+              ) : (
+                <>
+                  Login
+                  <ArrowRight size={18} />
+                </>
+              )}
             </button>
-
-            {/* Register */}
-            <p className="mt-6 text-center text-sm text-slate-500">
-
-              Don't have an account?{" "}
-
-              <Link
-                to="/register"
-                className="font-medium text-blue-400 transition hover:text-blue-300"
-              >
-                Register
-              </Link>
-
-            </p>
 
           </form>
 
-          {/* Footer */}
-          <p className="mt-6 text-center text-xs text-slate-600">
-            Secure access for MentorConnect users
-          </p>
+          {/* Register */}
+          <div className="text-center mt-6">
+            <p className="text-slate-400 text-sm">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                className="text-cyan-400 hover:text-cyan-300 font-medium"
+              >
+                Register
+              </Link>
+            </p>
+          </div>
+
+          {/* Admin Approval Info */}
+          <div className="mt-6 p-4 rounded-xl bg-slate-800/60 border border-slate-700">
+            <div className="flex gap-3">
+
+              <ShieldCheck
+                size={20}
+                className="text-cyan-400 flex-shrink-0 mt-0.5"
+              />
+
+              <div>
+                <p className="text-sm font-medium text-slate-200">
+                  Account Approval
+                </p>
+
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  New Mentor and Mentee accounts require
+                  admin approval before login.
+                </p>
+              </div>
+
+            </div>
+          </div>
 
         </div>
 
-      </main>
+        {/* Footer */}
+        <p className="text-center text-xs text-slate-500 mt-6">
+          © 2026 MentorConnect. All rights reserved.
+        </p>
+
+      </div>
 
     </div>
   );
