@@ -30,7 +30,8 @@ function Login() {
     e.preventDefault();
 
     // Get backend API URL from Vercel/Vite environment variable
-    const API = import.meta.env.VITE_API_URL;
+    const API = import.meta.env.VITE_API_URL  || 
+    "https://mentorconnect-a7c8.onrender.com/api";
 
     console.log("API URL:", API);
 

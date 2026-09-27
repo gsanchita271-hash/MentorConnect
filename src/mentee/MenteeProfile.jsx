@@ -14,7 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || "https://mentorconnect-a7c8.onrender.com/api";
 
 function MenteeProfile() {
   const [profile, setProfile] = useState(null);
