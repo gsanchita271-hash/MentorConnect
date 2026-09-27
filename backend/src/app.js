@@ -31,6 +31,7 @@ app.use(
     origin: [
       "http://localhost:5173",
       "https://mentor-connect-wheat.vercel.app",
+      "https://mentor-connect-frontend-azure.vercel.app",
     ],
     credentials: true,
   })
