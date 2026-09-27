@@ -13,7 +13,15 @@ dotenv.config({
     path: './.env'
 })
 const app = express()
-app.use(cors())
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://mentor-connect-wheat.vercel.app",
+    ],
+    credentials: true,
+  })
+);
 app.use(express.json())
 app.use("/api/auth", authRoutes);
 app.use("/api/meetings", meetingRoutes);
